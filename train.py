@@ -69,7 +69,6 @@ class Pascal(Dataset):
 # DataLoader
 
 # train dataloader and test dataloader
-
 # optimizer
 
 # model
@@ -86,8 +85,18 @@ class Pascal(Dataset):
 
 
 if __name__ == "__main__":
+  import yolo
+  BATCH_SIZE = 8
+  LEARNING_RATE = 0.001
   path = pathlib.Path("/mnt/d/pascal/")
   dataset = Pascal(path, "train.csv")
+  train_dataloader = DataLoader(dataset, batch_size=BATCH_SIZE)
+  test_dataloader = DataLoader(Pascal(path, "test.csv"))
+  
+  model = yolo.YOLO(S=7, B=2, C=20)
+  optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE)
+
+
   print(len(dataset))
   print(dataset.__getitem__(0))
 
