@@ -60,9 +60,9 @@ class Pascal(Dataset):
 
       label[y_center//S_grid_size, x_center//S_grid_size, class_i] = 1
       if label[y_center//S_grid_size, x_center//S_grid_size, C:(C+B)].sum() == 0:
-        label[y_center//S_grid_size, x_center//S_grid_size, C:(C+5)] = np.array([box[1], box[2], box[3], box[4], 1,])
+        label[y_center//S_grid_size, x_center//S_grid_size, C:(C+5)] = torch.from_numpy(np.array([box[1], box[2], box[3], box[4], 1,]))
       else:
-        label[y_center//S_grid_size, x_center//S_grid_size, (C+5):(C+5*B)] = np.array([box[1], box[2], box[3], box[4], 1,])
+        label[y_center//S_grid_size, x_center//S_grid_size, (C+5):(C+5*B)] = torch.from_numpy(np.array([box[1], box[2], box[3], box[4], 1,]))
 
     return img, label
 
