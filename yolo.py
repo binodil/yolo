@@ -1,10 +1,11 @@
-
-
+# implementation of YOLO paper by Joseph Redmon et al. (2016)
+# credits to https://github.com/aladdinpersson/Machine-Learning-Collection/blob/master/ML/Pytorch/object_detection/YOLO/model.py
 import torch
 import torch.nn as nn
 
 
 # Padding is not defined in the paper. We are doing reverse engineering.
+#----------------------------------------------------------------------
 
 class YOLO(nn.Module):
   def __init__(self, S:int, C:int, B:int):
@@ -66,12 +67,12 @@ class YOLO(nn.Module):
   def forward(self, x): return self.backbone(x)
 
 
- 
-model = YOLO(S=7, B=2, C=20)  # same as in paper
-x = torch.Tensor(1, 3, 448, 448)
-out = model(x)
-print(out.shape)
-print(out.reshape(7, 7, 30).shape)
+if __name__ == "__main__": 
+  model = YOLO(S=7, B=2, C=20)  # same as in paper
+  x = torch.Tensor(1, 3, 448, 448)
+  out = model(x)
+  print(out.shape)
+  print(out.reshape(7, 7, 30).shape)
 
 
 
