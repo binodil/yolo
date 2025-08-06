@@ -66,7 +66,25 @@ class Pascal(Dataset):
 
     return img, label
 
- 
+# DataLoader
+
+# train dataloader and test dataloader
+
+# optimizer
+
+# model
+
+# train loop
+
+
+# optimizer zero grad
+
+# Loss function apply
+
+# optimizer step (backprop)
+
+
+
 if __name__ == "__main__":
   path = pathlib.Path("/mnt/d/pascal/")
   dataset = Pascal(path, "train.csv")
