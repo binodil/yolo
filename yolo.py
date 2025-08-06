@@ -62,7 +62,7 @@ class YOLO(nn.Module):
     nn.ReLU(),
     # Dropout?
     # LeakyReLU? BatchNorm?
-    nn.Linear(4096, S*S*(C+B*5)),
+    nn.Linear(4096, S*S*(C+5*B)),
     )
   def forward(self, x): return self.backbone(x)
 
