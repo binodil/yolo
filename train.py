@@ -2,6 +2,7 @@ import pathlib
 import csv
 
 import cv2
+import numpy as np
 import torch
 from torch.utils.data import Dataset, DataLoader
 
@@ -37,8 +38,7 @@ class Pascal(Dataset):
   def __len__(self): return len(self.image_paths)
 
   def __getitem__(self, idx):
-    img_path = self.path / self.image_paths[idx]
-    print(img_path)
+    img_path = self.path/"images"/self.image_paths[idx]
     img = cv2.imread(img_path)
     # preprocessing logic
     img = cv2.resize(img, (448, 448))
@@ -56,11 +56,13 @@ class Pascal(Dataset):
       width = int(box[3] * 448)
       height = int(box[4] * 448)
       class_i = box[0]
-      label[y_center//S, x_center//S, class_i] = 1
-      if label[y_center//S, x_center//S, C:(C+B)].sum() == 0:
-        label[y_center//S, x_center//S, C:(C+5)] = [      box[1], box[2], box[3], box[4], 1,]
+      S_grid_size = 448//S
+
+      label[y_center//S_grid_size, x_center//S_grid_size, class_i] = 1
+      if label[y_center//S_grid_size, x_center//S_grid_size, C:(C+B)].sum() == 0:
+        label[y_center//S_grid_size, x_center//S_grid_size, C:(C+5)] = np.array([box[1], box[2], box[3], box[4], 1,])
       else:
-        label[y_center//S, x_center//S, (C+5):(C+5*B)] = [box[1], box[2], box[3], box[4], 1,]
+        label[y_center//S_grid_size, x_center//S_grid_size, (C+5):(C+5*B)] = np.array([box[1], box[2], box[3], box[4], 1,])
 
     return img, label
 
