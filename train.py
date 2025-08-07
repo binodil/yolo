@@ -75,21 +75,20 @@ class Pascal(Dataset):
 
     return img, label
 
-# DataLoader
-
-# train dataloader and test dataloader
-# optimizer
-
-# model
-
-# train loop
-
-
-# optimizer zero grad
-
-# Loss function apply
-
-# optimizer step (backprop)
+def intersect_over_union(self, bbox, truth_bbox):
+  # return what? the percentage of similarity?
+  # the result between 0 and 1?
+  # IOU > .5 means covering more than 50%. So based on this we need to find
+  # x1, y1 is bbox top left corner
+  # x2, y2 is bbox bottom right corner
+  # x3, y3 is truth_bbox top left corner
+  # x4, y4 is truth_bbox bottom right corner
+  x, y, w, h, _ = bbox
+  x1 = x - w/2
+  y1 = y - h/2
+  
+  x2 = x + w/2
+  y2 = y + h/2
 
 
 
@@ -122,12 +121,13 @@ if __name__ == "__main__":
       # calculate loss between y_hat and y_true
       # Loss on x and y of object
       total_loss = -torch.inf
+      mse_xy = 0
+      mse_wh = 0
+      mse_class_cond = 0
+      mse_no_class_cond = 0
+
       for i in range(S):
         for j in range(S):
-          mse_xy = -torch.inf
-          mse_wh = -torch.inf
-          mse_class_cond = -torch.inf
-          mse_no_class_cond = -torch.inf
           class_cond_true = label_true[:, i, j, :C]
           class_cond_hat = label_hat[:, i, j, :C]
  
@@ -147,29 +147,24 @@ if __name__ == "__main__":
             score_true = out[:, 4]
             #print(score_true)            
             # we have nan value in mse_wh formula. We shall fix it!
-            for i, t in enumerate([w_hat, h_hat, w_true, h_true]):
-              if t.nansum() > 0:
-                  print(i, t)
-            mse_xy = (((x_true - x_hat)**2 + (y_true - y_hat)**2) * score_true).sum()
-
-            mse_wh = ((torch.sqrt(w_true) - torch.sqrt(w_hat))**2 + (torch.sqrt(h_true) - torch.sqrt(h_hat))**2 * score_true).sum()
-            print(mse_wh)
-            print(mse_xy)
-            # if object appears, can use the score and if it is non zero then use?
-            # How to know if object appears in cell [i, j].
-
-            #if score_true == 1:
-            #  print("Yes score is one")
-              #mse_xy += (x_true - x_hat)**2 + (y_true - y_hat)**2
-              #mse_wh += (w_true**(1/2) - w_hat**(1/2))**2 + (h_true**(1/2) - h_hat**(1/2))**2
-              #print("mse_xy:", mse_xy)
-              #print("mse_wh:", mse_wh)
-
-              #mse_class_cond += ((class_cond_true - class_cond_hat)**2).sum()
-              #mse_no_class_cond += ((class_cond_true - class_cond_hat)**2).sum()
+            mse_xy += (((x_true - x_hat)**2 + (y_true - y_hat)**2) * score_true).sum()
             
-            # for each cell grid if object exists do sum of (p_i(c) - p_i_hat(c))**2
+            # we have nan values because we can not sqrt negative values How to fix this issue then?!We need to include ReLU or LeakyReLU in the model
+            mse_wh += ((torch.sqrt(w_true) - w_hat.sign()*torch.sqrt(w_hat.abs()))**2 + (torch.sqrt(h_true) - h_hat.sign()*torch.sqrt(h_hat.abs()))**2 * score_true).sum()
+            
 
+
+            #print(mse_xy, mse_wh)
+            score_2d = score_true.unsqueeze(1)
+            class_cond = ((class_cond_true - class_cond_hat)**2 * score_2d).sum()
+            inverse_score_2d = 1 - score_2d
+            class_no_cond = theta_noobj * ((class_cond_true - class_cond_hat)**2 * inverse_score_2d).sum()
+            
+            print(class_cond)
+            print(class_no_cond)
+          # for each cell grid if object exists do sum of (p_i(c) - p_i_hat(c))**2
+         # class loss
+         ((class_cond_true - class_cond_hat)**2).sum()
 
 
 
