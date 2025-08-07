@@ -69,10 +69,10 @@ class YOLO(nn.Module):
 
 if __name__ == "__main__": 
   model = YOLO(S=7, B=2, C=20)  # same as in paper
-  x = torch.Tensor(1, 3, 448, 448)
+  x = torch.randn(1, 3, 448, 448)
   out = model(x)
   print(out.shape)
-  print(out.reshape(7, 7, 30).shape)
+  print(out.reshape(1, 7, 7, 30).shape)
 
 
 
