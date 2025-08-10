@@ -117,7 +117,7 @@ if __name__ == "__main__":
   #---Loss hyperparams
   theta_coord = 5
   theta_noobj = .5
-  device = torch.device("cpu")
+  device = torch.device("mps")
 
   # path = pathlib.Path("/mnt/d/pascal/")  # WSL.exe in Windows
   path = pathlib.Path("/Users/sardor/fun/yolo/pascalvoc-yolo")  # MacOS
@@ -125,15 +125,15 @@ if __name__ == "__main__":
   #test_dataloader = DataLoader(Pascal(path, "test.csv"))
   
   model = yolo.YOLO(S=7, B=2, C=20)
-  model.to(device)
+  model = model.to(device)
   optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE)
   for epoch in range(EPOCH_NUM):
     strt_epoch = time.perf_counter()  
     for btch_i, batch in enumerate(train_dataloader):
       strt_batch = time.perf_counter()
       images, label_true = batch
-      images.to(device)
-      label_true.to(device)
+      images = images.to(device)
+      label_true = label_true.to(device)
       optimizer.zero_grad()
       label_hat = model(images)
       label_hat = label_hat.reshape(BATCH_SIZE, S, S, C+5*B)
