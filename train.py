@@ -75,34 +75,48 @@ class Pascal(Dataset):
 
     return img, label
 
-def intersect_over_union(self, bbox, truth_bbox):
-  # return what? the percentage of similarity?
-  # the result between 0 and 1?
-  # IOU > .5 means covering more than 50%. So based on this we need to find
-  # x1, y1 is bbox top left corner
-  # x2, y2 is bbox bottom right corner
-  # x3, y3 is truth_bbox top left corner
-  # x4, y4 is truth_bbox bottom right corner
-  x, y, w, h, _ = bbox
-  x1 = x - w/2
-  y1 = y - h/2
+def intersect_over_union(truth_bbox, pred_bbox, img_size, S):
+  # img_size = 448; We need because bbox are normalized!
+  # S to unnormalize x_center and y_center.
   
-  x2 = x + w/2
-  y2 = y + h/2
-
-
+  def convert_bbox(bbox):
+    x, y, w, h = bbox.T
+    w = w * img_size
+    h = h * img_size
+    x = x * img_size/S  # X w.r.t. correcponding grid cell
+    y = y * img_size/S
+    x1 = x - w/2
+    y1 = y - h/2
+    x2 = x + w/2
+    y2 = y + h/2
+    return x1, y1, x2, y2
+  x1, y1, x2, y2 = convert_bbox(truth_bbox)
+  x1_inter = torch.max(x1, x3)
+  y1_inter = torch.max(y1, y3)
+  x2_inter = torch.min(x2, x4)
+  y2_inter = torch.min(y2, y4)
+  intersect = (x2_inter - x1_inter) * (y2_inter - y1_inter)
+  intersect[(x1_inter>x2_inter) & (y1_inter>y2_inter)] = 0.0
+  iou = intersect / (((x2-x1)*(y2-y1)) + ((x4-x3)*(y4-y3)) - intersect)
+  return iou
+  
 
 if __name__ == "__main__":
+  #bb1 = torch.Tensor([[0.5, 0.5, 0.6, 0.7], [0.5, 0.5, 0.6, 0.7], [0.9, 0.9, 0.1, 0.1], [0.5, 0.5, 0.6, 0.7], [0.9, 0.9, 0.001, 0.001]])
+  #bb2 = torch.Tensor([[0.5, 0.5, 0.3, 0.7], [0.5, 0.5, 0.3, 0.35], [0.9, 0.9, 0.1, 0.1], [0, 0, 0, 0], [0.1, 0.1, 0.001, 0.001]])  
+  #intersect_over_union(bb1, bb2, img_size=448, S=7)
+  #import sys; sys.exit(0)
   import yolo
   BATCH_SIZE = 2
-  LEARNING_RATE = 0.00001
+  LEARNING_RATE = 0.0001
   EPOCH_NUM = 10
 
   #---Loss hyperparams
   theta_coord = 5
   theta_noobj = .5
 
-  path = pathlib.Path("/mnt/d/pascal/")
+  # path = pathlib.Path("/mnt/d/pascal/")  # WSL.exe in Windows
+  path = pathlib.Path("/Users/sardor/fun/yolo/pascalvoc-yolo")  # MacOS
   train_dataloader = DataLoader(Pascal(path, "train.csv"), batch_size=BATCH_SIZE)
   #test_dataloader = DataLoader(Pascal(path, "test.csv"))
   
@@ -113,19 +127,16 @@ if __name__ == "__main__":
     for i, batch in enumerate(train_dataloader):
     #for i, batch in enumerate([(torch.randn(BATCH_SIZE, 3, 448, 448), torch.randn(BATCH_SIZE, 7, 7, 30))]):
       images, label_true = batch
-      print(images.shape)
       optimizer.zero_grad()
       label_hat = model(images)
       label_hat = label_hat.reshape(BATCH_SIZE, S, S, C+5*B)
-      print(label_true.shape)
       # calculate loss between y_hat and y_true
       # Loss on x and y of object
-      total_loss = -torch.inf
+      total_loss = 0
       mse_xy = 0
       mse_wh = 0
       mse_class_cond = 0
       mse_no_class_cond = 0
-
       for i in range(S):
         for j in range(S):
           class_cond_true = label_true[:, i, j, :C]
@@ -137,24 +148,20 @@ if __name__ == "__main__":
             y_hat = out[:, 1]
             w_hat = out[:, 2]
             h_hat = out[:, 3]
-            score = out[:, 4]
+            score_hat = out[:, 4]
 
-            out = label_true[:, i, j, (C + b*5):C+(b+1)*5]
-            x_true = out[:, 0]
-            y_true = out[:, 1]
-            w_true = out[:, 2]
-            h_true = out[:, 3]
-            score_true = out[:, 4]
-            #print(score_true)            
+            out_true = label_true[:, i, j, (C + b*5):C+(b+1)*5]
+            x_true = out_true[:, 0]
+            y_true = out_true[:, 1]
+            w_true = out_true[:, 2]
+            h_true = out_true[:, 3]
+            score_true = intersect_over_union(out_true[:, :4], out[:, :4], img_size=448, S=S)
             # we have nan value in mse_wh formula. We shall fix it!
             mse_xy += (((x_true - x_hat)**2 + (y_true - y_hat)**2) * score_true).sum()
-            
-            # we have nan values because we can not sqrt negative values How to fix this issue then?!We need to include ReLU or LeakyReLU in the model
             mse_wh += ((torch.sqrt(w_true) - w_hat.sign()*torch.sqrt(w_hat.abs()))**2 + (torch.sqrt(h_true) - h_hat.sign()*torch.sqrt(h_hat.abs()))**2 * score_true).sum()
-            
-
-
-            #print(mse_xy, mse_wh)
+            print(mse_xy, mse_wh)
+            print("Confidence score: ", score_true)
+            '''
             score_2d = score_true.unsqueeze(1)
             class_cond = ((class_cond_true - class_cond_hat)**2 * score_2d).sum()
             inverse_score_2d = 1 - score_2d
@@ -162,11 +169,9 @@ if __name__ == "__main__":
             
             print(class_cond)
             print(class_no_cond)
+            '''
           # for each cell grid if object exists do sum of (p_i(c) - p_i_hat(c))**2
          # class loss
-         ((class_cond_true - class_cond_hat)**2).sum()
-
-
 
       # do backprop
       # optimizer.step()
