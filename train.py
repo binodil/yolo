@@ -106,14 +106,18 @@ if __name__ == "__main__":
   #bb2 = torch.Tensor([[0.5, 0.5, 0.3, 0.7], [0.5, 0.5, 0.3, 0.35], [0.9, 0.9, 0.1, 0.1], [0, 0, 0, 0], [0.1, 0.1, 0.001, 0.001]])  
   #intersect_over_union(bb1, bb2, img_size=448, S=7)
   #import sys; sys.exit(0)
+   
+  import time
   import yolo
-  BATCH_SIZE = 2
-  LEARNING_RATE = 0.0001
-  EPOCH_NUM = 10
+
+  BATCH_SIZE = 64
+  LEARNING_RATE = 0.00003
+  EPOCH_NUM = 100
 
   #---Loss hyperparams
   theta_coord = 5
   theta_noobj = .5
+  device = torch.device("cpu")
 
   # path = pathlib.Path("/mnt/d/pascal/")  # WSL.exe in Windows
   path = pathlib.Path("/Users/sardor/fun/yolo/pascalvoc-yolo")  # MacOS
@@ -121,17 +125,18 @@ if __name__ == "__main__":
   #test_dataloader = DataLoader(Pascal(path, "test.csv"))
   
   model = yolo.YOLO(S=7, B=2, C=20)
+  model.to(device)
   optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE)
-  
   for epoch in range(EPOCH_NUM):
-    for i, batch in enumerate(train_dataloader):
-    #for i, batch in enumerate([(torch.randn(BATCH_SIZE, 3, 448, 448), torch.randn(BATCH_SIZE, 7, 7, 30))]):
+    strt_epoch = time.perf_counter()  
+    for btch_i, batch in enumerate(train_dataloader):
+      strt_batch = time.perf_counter()
       images, label_true = batch
+      images.to(device)
+      label_true.to(device)
       optimizer.zero_grad()
       label_hat = model(images)
       label_hat = label_hat.reshape(BATCH_SIZE, S, S, C+5*B)
-      # calculate loss between y_hat and y_true
-      # Loss on x and y of object
       mse_xy = 0
       mse_wh = 0
       mse_conf_score = 0
@@ -156,21 +161,27 @@ if __name__ == "__main__":
             h_true = out_true[:, 3]
             obj_exists = out_true[:, 4]
             score_true = intersect_over_union(out_true[:, :4], out[:, :4], img_size=448, S=S)
-            mse_xy += (((x_true - x_hat)**2 + (y_true - y_hat)**2) * obj_exists).sum()
-            mse_wh += ((torch.sqrt(w_true) - w_hat.sign()*torch.sqrt(w_hat.abs()))**2 + (torch.sqrt(h_true) - h_hat.sign()*torch.sqrt(h_hat.abs()))**2 * score_true).sum()
+            mse_xy += (((x_true - x_hat)**2 + (y_true - y_hat)**2) * obj_exists)  #.sum()
+            mse_wh += ((torch.sqrt(w_true) - w_hat.sign()*torch.sqrt(w_hat.abs()))**2 + (torch.sqrt(h_true) - h_hat.sign()*torch.sqrt(h_hat.abs()))**2 * score_true)  #.sum()
             mse_conf_score += obj_exists * (score_true - score_hat)**2
             mse_no_conf_score += (1-obj_exists)*(score_true-score_hat)**2
         # here we need 5th loss
-        mse_class_loss += ((class_cond_true - class_cond_hat)**2 * class_cond_true).sum()
+          mse_class_loss += ((class_cond_true - class_cond_hat)**2 * class_cond_true).sum(1) #.sum()
+      
         #print(mse_class_loss)
         # class loss
           # for each cell grid if object exists do sum of (p_i(c) - p_i_hat(c))**2
-    
+      #print(f"{mse_xy=}, {mse_wh=}, {mse_conf_score=}, {mse_no_conf_score=}, {mse_class_loss=}")
       total_loss = theta_coord * mse_xy + theta_coord * mse_wh + mse_conf_score + theta_noobj * mse_no_conf_score + mse_class_loss
+      #print(total_loss)
       total_loss = torch.mean(total_loss)
-      print(total_loss)
       total_loss.backward()
       optimizer.step()
+      fnsh_batch = time.perf_counter()
+      avrg_time = fnsh_batch - strt_batch
+      print(f"{epoch} epoch | total loss: {total_loss.item():.2f} | dur (s): {avrg_time:.2f} | {btch_i}/{len(train_dataloader)} | Remaining: {avrg_time*(len(train_dataloader) - i)}")
+      #import pdb; pdb.set_trace()
+    fnsh_epoch = time.perf_counter()
       # do backprop
       # optimizer.step()
 
