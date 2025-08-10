@@ -78,7 +78,6 @@ class Pascal(Dataset):
 def intersect_over_union(truth_bbox, pred_bbox, img_size, S):
   # img_size = 448; We need because bbox are normalized!
   # S to unnormalize x_center and y_center.
-  
   def convert_bbox(bbox):
     x, y, w, h = bbox.T
     w = w * img_size
@@ -91,6 +90,7 @@ def intersect_over_union(truth_bbox, pred_bbox, img_size, S):
     y2 = y + h/2
     return x1, y1, x2, y2
   x1, y1, x2, y2 = convert_bbox(truth_bbox)
+  x3, y3, x4, y4 = convert_bbox(pred_bbox)
   x1_inter = torch.max(x1, x3)
   y1_inter = torch.max(y1, y3)
   x2_inter = torch.min(x2, x4)
@@ -132,11 +132,11 @@ if __name__ == "__main__":
       label_hat = label_hat.reshape(BATCH_SIZE, S, S, C+5*B)
       # calculate loss between y_hat and y_true
       # Loss on x and y of object
-      total_loss = 0
       mse_xy = 0
       mse_wh = 0
-      mse_class_cond = 0
-      mse_no_class_cond = 0
+      mse_conf_score = 0
+      mse_no_conf_score = 0
+      mse_class_loss = 0
       for i in range(S):
         for j in range(S):
           class_cond_true = label_true[:, i, j, :C]
@@ -149,47 +149,29 @@ if __name__ == "__main__":
             w_hat = out[:, 2]
             h_hat = out[:, 3]
             score_hat = out[:, 4]
-
             out_true = label_true[:, i, j, (C + b*5):C+(b+1)*5]
             x_true = out_true[:, 0]
             y_true = out_true[:, 1]
             w_true = out_true[:, 2]
             h_true = out_true[:, 3]
+            obj_exists = out_true[:, 4]
             score_true = intersect_over_union(out_true[:, :4], out[:, :4], img_size=448, S=S)
-            # we have nan value in mse_wh formula. We shall fix it!
-            mse_xy += (((x_true - x_hat)**2 + (y_true - y_hat)**2) * score_true).sum()
+            mse_xy += (((x_true - x_hat)**2 + (y_true - y_hat)**2) * obj_exists).sum()
             mse_wh += ((torch.sqrt(w_true) - w_hat.sign()*torch.sqrt(w_hat.abs()))**2 + (torch.sqrt(h_true) - h_hat.sign()*torch.sqrt(h_hat.abs()))**2 * score_true).sum()
-            print(mse_xy, mse_wh)
-            print("Confidence score: ", score_true)
-            '''
-            score_2d = score_true.unsqueeze(1)
-            class_cond = ((class_cond_true - class_cond_hat)**2 * score_2d).sum()
-            inverse_score_2d = 1 - score_2d
-            class_no_cond = theta_noobj * ((class_cond_true - class_cond_hat)**2 * inverse_score_2d).sum()
-            
-            print(class_cond)
-            print(class_no_cond)
-            '''
+            mse_conf_score += obj_exists * (score_true - score_hat)**2
+            mse_no_conf_score += (1-obj_exists)*(score_true-score_hat)**2
+        # here we need 5th loss
+        mse_class_loss += ((class_cond_true - class_cond_hat)**2 * class_cond_true).sum()
+        #print(mse_class_loss)
+        # class loss
           # for each cell grid if object exists do sum of (p_i(c) - p_i_hat(c))**2
-         # class loss
-
+    
+      total_loss = theta_coord * mse_xy + theta_coord * mse_wh + mse_conf_score + theta_noobj * mse_no_conf_score + mse_class_loss
+      total_loss = torch.mean(total_loss)
+      print(total_loss)
+      total_loss.backward()
+      optimizer.step()
       # do backprop
       # optimizer.step()
-      break
-    break
-
-
-
-    
-
-
-
-
-
-
-
-
-
-
 
 
