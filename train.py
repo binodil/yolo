@@ -142,35 +142,37 @@ if __name__ == "__main__":
       mse_conf_score = 0
       mse_no_conf_score = 0
       mse_class_loss = 0
-      for i in range(S):
-        for j in range(S):
-          class_cond_true = label_true[:, i, j, :C]
-          class_cond_hat = label_hat[:, i, j, :C]
- 
-          for b in range(B):
-            out = label_hat[:, i, j, C+b*5:C+(b+1)*5]
-            x_hat = out[:, 0]
-            y_hat = out[:, 1]
-            w_hat = out[:, 2]
-            h_hat = out[:, 3]
-            score_hat = out[:, 4]
-            out_true = label_true[:, i, j, (C + b*5):C+(b+1)*5]
-            x_true = out_true[:, 0]
-            y_true = out_true[:, 1]
-            w_true = out_true[:, 2]
-            h_true = out_true[:, 3]
-            obj_exists = out_true[:, 4]
-            score_true = intersect_over_union(out_true[:, :4], out[:, :4], img_size=448, S=S)
-            mse_xy += (((x_true - x_hat)**2 + (y_true - y_hat)**2) * obj_exists)  #.sum()
-            mse_wh += ((torch.sqrt(w_true) - w_hat.sign()*torch.sqrt(w_hat.abs()))**2 + (torch.sqrt(h_true) - h_hat.sign()*torch.sqrt(h_hat.abs()))**2 * score_true)  #.sum()
-            mse_conf_score += obj_exists * (score_true - score_hat)**2
-            mse_no_conf_score += (1-obj_exists)*(score_true-score_hat)**2
-        # here we need 5th loss
-          mse_class_loss += ((class_cond_true - class_cond_hat)**2 * class_cond_true).sum(1) #.sum()
+      label_true = label_true.flatten(1, 2) # [batch, 49, 30]
+      label_hat = label_hat.flatten(1, 2)  # [batch, 49, 30]
       
-        #print(mse_class_loss)
-        # class loss
-          # for each cell grid if object exists do sum of (p_i(c) - p_i_hat(c))**2
+      for i in range(49):
+        class_cond_true = label_true[:, i, :C]
+        class_cond_hat = label_hat[:, i, :C]
+
+        for b in range(B):
+          out = label_hat[:, i, C+b*5:C+(b+1)*5]
+          x_hat = out[:, 0]
+          y_hat = out[:, 1]
+          w_hat = out[:, 2]
+          h_hat = out[:, 3]
+          score_hat = out[:, 4]
+          out_true = label_true[:, i, C + b*5:C+(b+1)*5]
+          x_true = out_true[:, 0]
+          y_true = out_true[:, 1]
+          w_true = out_true[:, 2]
+          h_true = out_true[:, 3]
+          obj_exists = out_true[:, 4]
+          score_true = intersect_over_union(out_true[:, :4], out[:, :4], img_size=448, S=S)
+          mse_xy += (((x_true - x_hat)**2 + (y_true - y_hat)**2) * obj_exists)  #.sum()
+          mse_wh += ((torch.sqrt(w_true) - w_hat.sign()*torch.sqrt(w_hat.abs()))**2 + (torch.sqrt(h_true) - h_hat.sign()*torch.sqrt(h_hat.abs()))**2 * score_true)  #.sum()
+          mse_conf_score += obj_exists * (score_true - score_hat)**2
+          mse_no_conf_score += (1-obj_exists)*(score_true-score_hat)**2
+      # here we need 5th loss
+        mse_class_loss += ((class_cond_true - class_cond_hat)**2 * class_cond_true).sum(1) #.sum()
+    
+      #print(mse_class_loss)
+      # class loss
+        # for each cell grid if object exists do sum of (p_i(c) - p_i_hat(c))**2
       #print(f"{mse_xy=}, {mse_wh=}, {mse_conf_score=}, {mse_no_conf_score=}, {mse_class_loss=}")
       total_loss = theta_coord * mse_xy + theta_coord * mse_wh + mse_conf_score + theta_noobj * mse_no_conf_score + mse_class_loss
       #print(total_loss)
