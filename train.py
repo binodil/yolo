@@ -79,7 +79,9 @@ def intersect_over_union(truth_bbox, pred_bbox, img_size, S):
   # img_size = 448; We need because bbox are normalized!
   # S to unnormalize x_center and y_center.
   def convert_bbox(bbox):
-    x, y, w, h = bbox.T
+    # [B, 7*7, 4].T --> [4, B, 7*7]
+    x, y, w, h = bbox.permute(2, 0, 1)
+    # I can use Tensor.permute()
     w = w * img_size
     h = h * img_size
     x = x * img_size/S  # X w.r.t. correcponding grid cell
@@ -89,8 +91,8 @@ def intersect_over_union(truth_bbox, pred_bbox, img_size, S):
     x2 = x + w/2
     y2 = y + h/2
     return x1, y1, x2, y2
-  x1, y1, x2, y2 = convert_bbox(truth_bbox)
-  x3, y3, x4, y4 = convert_bbox(pred_bbox)
+  x1, y1, x2, y2 = convert_bbox(truth_bbox)  # x1: [B, 7*7], ..., y2: [B, 7*7]
+  x3, y3, x4, y4 = convert_bbox(pred_bbox)   # x3: [B, 7*7], ..., y4: [B, 7*7]
   x1_inter = torch.max(x1, x3)
   y1_inter = torch.max(y1, y3)
   x2_inter = torch.min(x2, x4)
@@ -121,7 +123,7 @@ if __name__ == "__main__":
 
   # path = pathlib.Path("/mnt/d/pascal/")  # WSL.exe in Windows
   path = pathlib.Path("/Users/sardor/fun/yolo/pascalvoc-yolo")  # MacOS
-  train_dataloader = DataLoader(Pascal(path, "train.csv"), batch_size=BATCH_SIZE)
+  train_dataloader = DataLoader(Pascal(path, "train.csv"), batch_size=BATCH_SIZE, num_workers=2)
   #test_dataloader = DataLoader(Pascal(path, "test.csv"))
   
   model = yolo.YOLO(S=7, B=2, C=20)
@@ -144,45 +146,47 @@ if __name__ == "__main__":
       mse_class_loss = 0
       label_true = label_true.flatten(1, 2) # [batch, 49, 30]
       label_hat = label_hat.flatten(1, 2)  # [batch, 49, 30]
-      
-      for i in range(49):
-        class_cond_true = label_true[:, i, :C]
-        class_cond_hat = label_hat[:, i, :C]
+      class_cond_true = label_true[:, :, :C]
+      class_cond_hat = label_hat[:, :, :C]
+      x_true_1 = label_true[:, :, 20]
+      y_true_1 = label_true[:, :, 21]
+      w_true_1 = label_true[:, :, 22]
+      h_true_1 = label_true[:, :, 23]
+      score_true_1 = label_true[:, :, 24]
+      x_true_2 = label_true[:, :, 25]
+      y_true_2 = label_true[:, : , 26]
+      w_true_2 = label_true[:, :, 27]
+      h_true_2 = label_true[:, :, 28]
+      score_true_2 = label_true[:, :, 29]
 
-        for b in range(B):
-          out = label_hat[:, i, C+b*5:C+(b+1)*5]
-          x_hat = out[:, 0]
-          y_hat = out[:, 1]
-          w_hat = out[:, 2]
-          h_hat = out[:, 3]
-          score_hat = out[:, 4]
-          out_true = label_true[:, i, C + b*5:C+(b+1)*5]
-          x_true = out_true[:, 0]
-          y_true = out_true[:, 1]
-          w_true = out_true[:, 2]
-          h_true = out_true[:, 3]
-          obj_exists = out_true[:, 4]
-          score_true = intersect_over_union(out_true[:, :4], out[:, :4], img_size=448, S=S)
-          mse_xy += (((x_true - x_hat)**2 + (y_true - y_hat)**2) * obj_exists)  #.sum()
-          mse_wh += ((torch.sqrt(w_true) - w_hat.sign()*torch.sqrt(w_hat.abs()))**2 + (torch.sqrt(h_true) - h_hat.sign()*torch.sqrt(h_hat.abs()))**2 * score_true)  #.sum()
-          mse_conf_score += obj_exists * (score_true - score_hat)**2
-          mse_no_conf_score += (1-obj_exists)*(score_true-score_hat)**2
-      # here we need 5th loss
-        mse_class_loss += ((class_cond_true - class_cond_hat)**2 * class_cond_true).sum(1) #.sum()
-    
-      #print(mse_class_loss)
-      # class loss
-        # for each cell grid if object exists do sum of (p_i(c) - p_i_hat(c))**2
-      #print(f"{mse_xy=}, {mse_wh=}, {mse_conf_score=}, {mse_no_conf_score=}, {mse_class_loss=}")
-      total_loss = theta_coord * mse_xy + theta_coord * mse_wh + mse_conf_score + theta_noobj * mse_no_conf_score + mse_class_loss
+      x_hat_1 = label_hat[:, :, 20]
+      y_hat_1 = label_hat[:, :, 21]
+      w_hat_1 = label_hat[:, :, 22]
+      h_hat_1 = label_hat[:, :, 23]
+      score_hat_1 = label_hat[:, :, 24]
+      x_hat_2 = label_hat[:, :, 25]
+      y_hat_2 = label_hat[:, :, 26]
+      w_hat_2 = label_hat[:, :, 27]
+      h_hat_2 = label_hat[:, :, 28]
+      score_hat_2 = label_hat[:, :, 29]
+      # obj_exists is depricated. Use genuine variable <<score_true>>.
+      mse_xy = ((x_true_1 - x_hat_1)**2 + (y_true_1 - y_hat_1)**2) * score_true_1 + ((x_true_2 - x_hat_2)**2 + (y_true_2 - y_hat_2)**2) * score_true_2
+      mse_wh = ((torch.sqrt(w_true_1) - w_hat_1.sign() * torch.sqrt(w_hat_1.abs()))**2 + (torch.sqrt(h_true_1) - h_hat_1.sign()*torch.sqrt(h_hat_1.abs()))**2) * score_true_1 + ((torch.sqrt(w_true_2) - w_hat_2.sign() * torch.sqrt(w_hat_2.abs()))**2 + (torch.sqrt(h_true_2) - h_hat_2.sign()*torch.sqrt(h_hat_2.abs()))**2) * score_true_2
+      #import pdb; pdb.set_trace()
+      iou_score_1 = intersect_over_union(label_true[:, :, 20:24], label_hat[:, :, 20:24], img_size=448, S=S)
+      iou_score_2 = intersect_over_union(label_true[:, :, 25:29], label_hat[:, :, 25:29], img_size=448, S=S)
+      mse_conf_score = score_true_1 * (iou_score_1 - score_hat_1)**2 + score_true_2 * (iou_score_2 - score_hat_2)**2
+      mse_no_conf_score = (1-score_true_1)*(iou_score_1 - score_hat_1)**2 + (1-score_true_2) * (iou_score_2 - score_hat_2)**2
+      mse_class_loss = ((class_cond_true - class_cond_hat)**2 * class_cond_true).sum(2) #.sum()
+      print(f"{mse_xy.sum().item()=}, {mse_wh.sum().item()=}, {mse_conf_score.sum().item()=}, {mse_no_conf_score.sum().item()=}, {mse_class_loss.sum().item()=}")
+      total_loss = theta_coord * mse_xy.sum() + theta_coord * mse_wh.sum() + mse_conf_score.sum() + theta_noobj * mse_no_conf_score.sum() + mse_class_loss.sum()
       #print(total_loss)
       total_loss = torch.mean(total_loss)
       total_loss.backward()
       optimizer.step()
       fnsh_batch = time.perf_counter()
       avrg_time = fnsh_batch - strt_batch
-      print(f"{epoch} epoch | total loss: {total_loss.item():.2f} | dur (s): {avrg_time:.2f} | {btch_i}/{len(train_dataloader)} | Remaining: {avrg_time*(len(train_dataloader) - i)}")
-      #import pdb; pdb.set_trace()
+      print(f"{epoch} epoch | total loss: {total_loss.item():.2f} | dur (s): {avrg_time:.2f} | {btch_i}/{len(train_dataloader)} | Remaining: {avrg_time*(len(train_dataloader) - btch_i)}")
     fnsh_epoch = time.perf_counter()
       # do backprop
       # optimizer.step()
